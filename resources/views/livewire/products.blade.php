@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Product;
+use App\Services\ProductShopScraper;
 use Illuminate\Contracts\Auth\Authenticatable;
 use function Livewire\Volt\{state, mount};
 
@@ -10,10 +11,28 @@ mount(function (Product $productModel, Authenticatable $user) {
     $this->products = $productModel->where('user_id', $user->id)->with('shops')->get();
 });
 
+$scrapeShops = function () {
+    $scraper = new ProductShopScraper();
+    $count = $scraper->scrapeAllShops();
+    $this->products = Product::where('user_id', auth()->id())->with('shops')->get();
+}
+
+
 ?>
 
 <div class="p-6 lg:p-8 bg-white shadow-[inset_0px_0px_0px_1px_rgba(26,26,0,0.16)] rounded-lg">
-    <h2 class="mb-4 font-medium text-xl">Your Products</h2>
+    <div class="flex justify-between items-center">  <h2 class="mb-4 font-medium text-xl">Your Products</h2>
+        <div class="flex justify-end mb-4">
+            <button
+                wire:click="scrapeShops"
+                class="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 disabled:opacity-50"
+                wire:loading.attr="disabled"
+            >
+                <span wire:loading>Scraping...</span>
+                <span wire:loading.remove>Scrape All Shop Prices</span>
+            </button>
+        </div></div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         @forelse ($products as $product)
             <div class="p-4 bg-[#FDFDFC] rounded-lg shadow hover:shadow-lg transition-shadow border border-[#e3e3e0]">
