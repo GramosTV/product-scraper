@@ -35,20 +35,22 @@ $scrapeShops = function () {
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         @forelse ($products as $product)
-            <div class="p-4 bg-[#FDFDFC] rounded-lg shadow hover:shadow-lg transition-shadow border border-[#e3e3e0]">
-                <h3 class="font-semibold text-lg mb-2">{{ $product->name }}</h3>
-                @php
-                    $lowestPrice = $product->shops->min('price');
-                @endphp
-                <p class="text-[#706f6c] mb-1">
-                    @if($lowestPrice !== null)
-                        ${{ number_format($lowestPrice, 2) }}
-                    @else
-                        <span class="italic text-gray-400">No price available</span>
-                    @endif
-                </p>
-                <div class="text-xs text-gray-500">Added: {{ $product->created_at->format('M d, Y') }}</div>
-            </div>
+            <a href="{{ route('product', $product) }}" class="block">
+                <div class="p-4 bg-[#FDFDFC] rounded-lg shadow hover:shadow-lg transition-shadow border border-[#e3e3e0] cursor-pointer">
+                    <h3 class="font-semibold text-lg mb-2">{{ $product->name }}</h3>
+                    @php
+                        $lowestPrice = $product->shops->min('price');
+                    @endphp
+                    <p class="text-[#706f6c] mb-1">
+                        @if($lowestPrice !== null)
+                            ${{ number_format($lowestPrice, 2) }}
+                        @else
+                            <span class="italic text-gray-400">No price available</span>
+                        @endif
+                    </p>
+                    <div class="text-xs text-gray-500">Added: {{ $product->created_at->format('M d, Y') }}</div>
+                </div>
+            </a>
         @empty
             <div class="col-span-full text-center text-gray-500 py-8">
                 No products found.
