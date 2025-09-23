@@ -21,4 +21,7 @@ Route::middleware([
     Route::get('/products/{product}', function (\App\Models\Product $product) {
         return view('product', ['product' => $product]);
     })->name('product');;
+    Route::get('/scraper', function () {
+        return view('scraper');
+    })->name('scraper');
 });
