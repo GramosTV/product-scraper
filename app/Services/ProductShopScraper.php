@@ -3,118 +3,129 @@
 namespace App\Services;
 
 use App\Models\Shop;
-use GuzzleHttp\Cookie\CookieJar;
 use Illuminate\Support\Facades\Log;
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\RequestException;
 
 class ProductShopScraper
 {
-    /**
-     * Scrape a shop URL for price using JSON-LD, Schema.org, Microdata, or RDFa.
-     */
     public function scrapeShop(Shop $shop): ?float
     {
         try {
-            $jar = new CookieJar();
-            $client = new Client([
-                'timeout' => 30,
-                'cookies' => $jar,
-                'headers' => [
-                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language' => 'en-US,en;q=0.9',
-                    'Referer' => 'https://www.google.com/',
-                ],
-                'allow_redirects' => true,
-            ]);
-            $response = $client->request('GET', $shop->url);
-            $html = $response->getBody()->getContents();
-            Log::debug('Request sent', ['url' => $shop->url]);
-            if (!$html) return null;
+            $escapedUrl = escapeshellarg($shop->url);
+            $nodeScript = base_path('scrape-html.cjs');
+            $command = "node $nodeScript $escapedUrl 2>&1";
+            Log::debug('Executing Playwright command', ['command' => $command]);
 
-            // Try JSON-LD first
-            if (preg_match('/<script type="application\/ld\+json">(.*?)<\/script>/is', $html, $matches)) {
-                $json = json_decode($matches[1], true);
+            $html = shell_exec($command);
+
+            if (!$html) {
+                Log::warning('No HTML returned', ['url' => $shop->url]);
+                return null;
+            }
+
+            Log::debug('HTML fetched', ['length' => strlen($html)]);
+
+            // --- 1. JSON-LD ---
+            preg_match_all('/<script type="application\/ld\+json">(.*?)<\/script>/is', $html, $matches);
+            foreach ($matches[1] as $jsonText) {
+                $json = json_decode($jsonText, true);
                 if (is_array($json)) {
                     $price = $this->extractPriceFromJsonLd($json);
                     if ($price !== null) return $price;
                 }
             }
 
-            // Try Microdata/RDFa (simple approach)
+            // --- 2. DOM XPath parsing ---
             $dom = new \DOMDocument();
             @$dom->loadHTML($html);
             $xpath = new \DOMXPath($dom);
-            // Look for itemprop="price"
-            $nodes = $xpath->query('//*[@itemprop="price"]');
-            foreach ($nodes as $node) {
-                $price = $node->nodeValue;
-                if (is_numeric($price)) return (float)$price;
+
+            $queries = [
+                '//*[@itemprop="price"]',
+                '//meta[@itemprop="price"]/@content',
+                '//*[@property="product:price" or @property="schema:price" or @property="product:sale_price"]',
+                '//meta[@property="product:price" or @property="schema:price" or @property="product:sale_price"]/@content',
+                '//*[@property="product:price:amount" or @property="product:sale_price:amount"]',
+                '//meta[@property="product:price:amount" or @property="product:sale_price:amount"]/@content',
+            ];
+            foreach ($queries as $query) {
+                $nodes = $xpath->query($query);
+                foreach ($nodes as $node) {
+                    $price = $node instanceof \DOMAttr ? $node->value : $node->nodeValue;
+                    Log::debug('Found price', ['price' => $price]);
+                    $price = $this->normalizePrice($price);
+                    if (is_numeric($price)) return (float)$price;
+                }
             }
 
-            // Look for meta property="price"
-            $nodes = $xpath->query('//meta[@itemprop="price"]');
-            foreach ($nodes as $node) {
-                $price = $node->getAttribute('content');
-                if (is_numeric($price)) return (float)$price;
-            }
-
-            // Look for RDFa product:price and schema:price
-            $nodes = $xpath->query('//*[@property="product:price" or @property="schema:price"]');
-            foreach ($nodes as $node) {
-                $price = $node->nodeValue;
-                if (is_numeric($price)) return (float)$price;
-            }
-            $nodes = $xpath->query('//meta[@property="product:price" or @property="schema:price"]');
-            foreach ($nodes as $node) {
-                $price = $node->getAttribute('content');
-                if (is_numeric($price)) return (float)$price;
-            }
-        } catch (RequestException $e) {
-            Log::error('Guzzle request error for shop ' . $shop->id . ': ' . $e->getMessage());
         } catch (\Exception $e) {
-            Log::error('Scraper error for shop ' . $shop->id . ': ' . $e->getMessage());
+            Log::error('Scraper error for shop ' . $shop->id, ['message' => $e->getMessage()]);
         }
+
         return null;
     }
 
-    /**
-     * Scrape a price from a given URL (without needing a Shop model in the database).
-     */
+    protected function normalizePrice(string $price): ?float
+    {
+        $price = trim($price);
+        $price = preg_replace('/[^\d.,]/', '', $price);
+
+        if ($price === '') {
+            return null;
+        }
+
+
+        if (preg_match('/\d+\.\d{3},\d{2}/', $price)) {
+            $price = str_replace(['.', ','], ['', '.'], $price);
+        }
+
+        elseif (strpos($price, ',') !== false && strpos($price, '.') === false) {
+            $price = str_replace(',', '.', $price);
+        }
+
+        elseif (preg_match('/\d+,\d{3}\.\d{2}/', $price)) {
+            $price = str_replace(',', '', $price);
+        }
+
+        return is_numeric($price) ? (float)$price : null;
+    }
+
+    protected function extractPriceFromJsonLd(array $json): ?float
+    {
+        $keys = ['offers.price', 'price', 'schema:price'];
+        foreach ($keys as $key) {
+            $value = $this->arrayDotGet($json, $key);
+            if (is_numeric($value)) return (float)$value;
+        }
+
+        // If JSON-LD is array of objects
+        foreach ($json as $obj) {
+            if (is_array($obj)) {
+                $price = $this->extractPriceFromJsonLd($obj);
+                if ($price !== null) return $price;
+            }
+        }
+
+        return null;
+    }
+
+    protected function arrayDotGet(array $array, string $key)
+    {
+        foreach (explode('.', $key) as $segment) {
+            if (isset($array[$segment])) {
+                $array = $array[$segment];
+            } else {
+                return null;
+            }
+        }
+        return $array;
+    }
+
     public function scrapePriceFromUrl(string $url): ?float
     {
         $shop = new Shop(['url' => $url]);
         return $this->scrapeShop($shop);
     }
 
-    /**
-     * Extract price from JSON-LD (Schema.org Product)
-     */
-    protected function extractPriceFromJsonLd(array $json): ?float
-    {
-        if (isset($json['offers']['price']) && is_numeric($json['offers']['price'])) {
-            return (float)$json['offers']['price'];
-        }
-        if (isset($json['price']) && is_numeric($json['price'])) {
-            return (float)$json['price'];
-        }
-        if (isset($json['schema:price']) && is_numeric($json['schema:price'])) {
-            return (float)$json['schema:price'];
-        }
-        // Sometimes JSON-LD is an array of objects
-        if (isset($json[0]) && is_array($json[0])) {
-            foreach ($json as $obj) {
-                $price = $this->extractPriceFromJsonLd($obj);
-                if ($price !== null) return $price;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Scrape all shops and update their prices.
-     */
     public function scrapeAllShops(): int
     {
         $count = 0;

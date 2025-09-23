@@ -31,34 +31,44 @@ $removeShop = function ($shopId) {
 ?>
 
 <div class="p-6 lg:p-8 bg-white shadow-[inset_0px_0px_0px_1px_rgba(26,26,0,0.16)] rounded-lg">
-    <nav class="mb-6 text-sm text-gray-500">
-        <a href="{{ route('products') }}" class="hover:underline">Products</a>
-        <span class="mx-2">&gt;</span>
-        <span class="text-gray-700 font-semibold">{{ $product?->name }}</span>
-    </nav>
 
     @if($product)
-
-        <div class="bg-white rounded-lg shadow p-6">
+        <div>
             <h3 class="text-lg font-semibold mb-4">Shops</h3>
             <form wire:submit.prevent="addShop" class="mb-4 flex gap-2">
-                <input type="url" wire:model="shopUrl" placeholder="Shop URL" class="flex-1 border-gray-300 rounded" />
-                <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded">Add Shop</button>
+                <input type="url" wire:model.defer="shopUrl" placeholder="Shop URL" class="flex-1 border-gray-300 rounded px-3 py-2" />
+                <button type="button" wire:click="addShop" class="px-3 py-2 bg-blue-600 text-white rounded">Add</button>
             </form>
             <ul>
-                @forelse ($shops as $shop)
+                @php
+                    $sortedShops = collect($shops)->sortBy(function($shop) {
+                        return is_null($shop->price) ? INF : $shop->price;
+                    });
+                @endphp
+                @forelse ($sortedShops as $shop)
                     @php
                         $domain = parse_url($shop->url, PHP_URL_HOST);
                         $favicon = $domain ? 'https://www.google.com/s2/favicons?domain=' . $domain : null;
                     @endphp
                     <li class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 shadow-sm hover:shadow transition-all mb-4">
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-1 min-w-0">
                             @if($favicon)
                                 <img src="{{ $favicon }}" alt="favicon" class="h-5 w-5 rounded" onerror="this.style.display='none'" />
                             @endif
-                            <span class="truncate text-gray-800">{{ $shop->url }}</span>
+                            <a href="{{ $shop->url }}" target="_blank" rel="noopener noreferrer" class="truncate text-gray-800 hover:underline" title="{{ $shop->url }}">
+                                {{ strlen($shop->url) > 100 ? substr($shop->url, 0, 100) . '…' : $shop->url }}
+                            </a>
                         </div>
-                        <button wire:click="removeShop({{ $shop->id }})" class="ml-4 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition">Remove</button>
+                        <div class="flex items-center gap-4 ml-4">
+                            <span class="font-bold text-base text-gray-800 min-w-[80px] text-right ml-8">
+                                @if($shop->price !== null)
+                                    ${{ number_format($shop->price, 2) }}
+                                @else
+                                    <span class="italic text-gray-400 font-normal">No price</span>
+                                @endif
+                            </span>
+                            <button wire:click="removeShop({{ $shop->id }})" class="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition">Remove</button>
+                        </div>
                     </li>
                 @empty
                     <li class="text-gray-400">No shops added.</li>

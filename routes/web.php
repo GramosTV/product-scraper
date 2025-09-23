@@ -24,4 +24,7 @@ Route::middleware([
     Route::get('/scraper', function () {
         return view('scraper');
     })->name('scraper');
+    Route::get('/new-product', function () {
+        return view('new-product');
+    })->name('new-product');
 });
