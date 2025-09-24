@@ -28,13 +28,25 @@ $removeShop = function ($shopId) {
     $this->shops = $this->product->shops()->get();
 };
 
+$scrapeAllShops = function () {
+    $scraper = app(\App\Services\ProductShopScraper::class);
+    $scraper->scrapeProductShops($this->product);
+    $this->shops = $this->product->shops()->get();
+};
+
 ?>
 
 <div class="p-6 lg:p-8 bg-white shadow-[inset_0px_0px_0px_1px_rgba(26,26,0,0.16)] rounded-lg">
 
     @if($product)
         <div>
-            <h3 class="text-lg font-semibold mb-4">Shops</h3>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">Shops</h3>
+                <button wire:click="scrapeAllShops" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:bg-blue-700 disabled:opacity-50" wire:loading.attr="disabled">
+                    <span wire:loading.remove>Scrape All Shops</span>
+                    <span wire:loading>Scraping...</span>
+                </button>
+            </div>
             <form wire:submit.prevent="addShop" class="mb-4 flex gap-2">
                 <input type="url" wire:model.defer="shopUrl" placeholder="Shop URL" class="flex-1 border-gray-300 rounded px-3 py-2" />
                 <button type="button" wire:click="addShop" class="px-3 py-2 bg-blue-600 text-white rounded">Add</button>

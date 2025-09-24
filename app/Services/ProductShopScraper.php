@@ -139,4 +139,17 @@ class ProductShopScraper
         }
         return $count;
     }
+    public function scrapeProductShops(\App\Models\Product $product): int
+    {
+        $count = 0;
+        foreach ($product->shops as $shop) {
+            $price = $this->scrapeShop($shop);
+            if ($price !== null) {
+                $shop->price = $price;
+                $shop->save();
+                $count++;
+            }
+        }
+        return $count;
+    }
 }
