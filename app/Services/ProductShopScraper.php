@@ -16,7 +16,7 @@ class ProductShopScraper
             Log::debug('Executing Playwright command', ['command' => $command]);
 
             $html = shell_exec($command);
-
+            Log::warning('HTML Log', ['html' => $html]);
             if (!$html) {
                 Log::warning('No HTML returned', ['url' => $shop->url]);
                 return null;
