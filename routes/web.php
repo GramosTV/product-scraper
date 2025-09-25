@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
+use App\Http\Controllers\Auth\SocialiteController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -28,3 +29,6 @@ Route::middleware([
         return view('new-product');
     })->name('new-product');
 });
+
+Route::get('/auth/google/redirect', [SocialiteController::class, 'redirectToGoogle'])->name('google.redirect');
+Route::get('/auth/google/callback', [SocialiteController::class, 'handleGoogleCallback'])->name('google.callback');

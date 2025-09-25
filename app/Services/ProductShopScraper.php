@@ -139,7 +139,7 @@ class ProductShopScraper
         }
         return $count;
     }
-    public function scrapeProductShops(\App\Models\Product $product): int
+    public function scrapeProductShops(Product $product): int
     {
         $count = 0;
         foreach ($product->shops as $shop) {
